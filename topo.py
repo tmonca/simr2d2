@@ -25,4 +25,4 @@ def topo(NumSrv=4, NumToR=1):
         counter += 1      
     print >> file, ""
 
-topo(35,3)
+topo(6,3)

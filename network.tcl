@@ -138,7 +138,7 @@ Network instproc connect_host {host} {
 	    puts "host $host_index <-> ToR $ToR_index"
     }
     
-    $ns_ duplex-link $host_($host_index) $ToR_($ToR_index) $ToR_BW_ $ToR_latency_ DropTail
+    $ns_ duplex-link $host_($host_index) $ToR_($ToR_index) $ToR_BW_ $ToR_latency_ MPriQueue
     $ns_ duplex-link-op $host_($host_index) $ToR_($ToR_index) queuePos 0.5
     $ns_ queue-limit $host_($host_index) $ToR_($ToR_index) $host_qlen_
     $ns_ queue-limit $ToR_($ToR_index) $host_($host_index) $ToR_qlen_
@@ -252,6 +252,19 @@ Flow instproc init {} {
 	
 }
 
+#
+# I need to work out how to have 2 types of traffic:
+#   - Background will run constantly and gets low priority.
+#     It should look at least something like DC traffic.
+#   - Latency sensitive is controlled by a scheduler. It
+#     will probably be carreid by UDP. Need to decide if
+#     it is replicated to all nodes (pseudo broadcast) or
+#     transmitted point to point. The former may be quite 
+#     hard to do
+#   - need to check out whether just setting the dest address
+#     to -1 (e.g. 255.255.255.255) _just works_ (tm)
+#
+
 Flow instproc ns_init {ns} {
     global framesize debug_
     $self instvar l4_ l5_ src_vm_ dst_vm_ type_ flow_id_
@@ -264,7 +277,8 @@ Flow instproc ns_init {ns} {
     if {$type_ == "TCP"} {
 	    set l4_ [new Agent/TCP]
 	    $l4_ set packetSize_ $framesize
-	    $l4_ set flow_id $flow_id_
+	    $l4_ set flow_id_ $flow_id_
+	    puts "flow ID: $flow_id_"
 	    
 	    set l5_ [new Application/FTP]
 

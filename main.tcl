@@ -22,7 +22,7 @@ set outfile layout.out
 #}
 
 if {0 == [info exists env(COMM_PATTERN)]} {
-     set pattern "NSQUARE"
+     set pattern "NTOONE"
 } else {
      set pattern $::env(COMM_PATTERN)
 }
