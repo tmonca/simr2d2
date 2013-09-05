@@ -55,22 +55,13 @@ puts -nonewline $fcombine "$pattern\t$num_active\t$block_size\t$num_rack\t$num_s
 # record average bw statistics
 #set favg_ind [open ./tput_cum_ind_avg.tr w]
 #set favg_tot [open ./tput_cum_tot_avg.tr w]
-if {$pattern == "LOCAL"} {
-    for {set i 1} {$i <= $num_active} {incr i} {
-        set bw($i) 0
-        set avg($i) 0
-        set bw_interval($i) 0
-        set bw_total($i) 0
-    }
-} else {
-    puts "pattern = $pattern"
-    for {set j 0} {$j < num_rack} {incr j} {
-        for {set i 0} {$i < $num_serv} {incr i} {
-            set avg($j,$i) 0
-            set bw_interval($j,$i) 0.0
-        }
-    }
+for {set i 0} {$i < $num_active} {incr i} {
+    set bw($i) 0
+    set avg($i) 0
+    set bw_interval($i) 0
+    set bw_total($i) 0
 }
+
 set it 0.0
 
 proc finish {} {
@@ -79,7 +70,7 @@ proc finish {} {
         global ns fall fmove finstant fcombine num_active bw_total
         $ns flush-trace
         set temp3 0
-        for {set i 1} {$i <= $num_active} {incr i} {
+        for {set i 0} {$i < $num_active} {incr i} {
             set temp3 [expr $temp3 + $bw_total($i)]
             puts "$temp3"
         }
@@ -118,7 +109,7 @@ for {set j 0} {$j < $num_rack} {incr j} {
 set tcpcdummy [new Agent/TCP/FullTcp]
 $ns attach-agent $node_(0,0) $tcpcdummy
 
-for {set a 1} {$a <= $num_active} {incr a} {
+for {set a 0} {$a < $num_active} {incr a} {
 
     # client_nodes
     set tcpc($a) [new Agent/TCP/Newreno]
@@ -133,34 +124,61 @@ for {set a 1} {$a <= $num_active} {incr a} {
 }
 
 # $pattern can be LOCAL, REMOTE, RANDOM
+set rng [new RNG]
+$rng seed $num_active
+set ru1 [new RandomVariable/Uniform]
+$ru1 use-rng $rng
+$ru1 set min_ 0
+$ru1 set max_ $num_rack
+        
+set ru2 [new RandomVariable/Uniform]
+$ru2 use-rng $rng
+$ru2 set min_ 0
+$ru2 set max_ $num_serv
 
-if {$pattern == "LOCAL"} {
+    for {set n 0} {$n < $num_active} {incr n} {
+        set tcp($n) [new Agent/TCP/Newreno]
+        #$tcp($n) attach [open ./tcp1.tr w]
+        #$tcp($n) set bugFix_ false
+        #$tcp($n) trace cwnd_
+        #$tcp($n) trace ack_
+        #$tcp($n) trace ssthresh_
+        #$tcp($n) trace nrexmit_
+        #$tcp($n) trace nrexmitpack_
+        #$tcp($n) trace nrexmitbytes_
+        #$tcp($n) trace ncwndcuts_
+        #$tcp($n) trace ncwndcuts1_
+        #$tcp($n) trace dupacks_
+        # $tcp($n) trace curseq_
+        # $tcp($n) trace maxseq_
+        $tcp($n) set fid_ [expr 1000 + $n]
+        
+        #Need to create random rack,machine combination
 
-    for {set i 1} {$i <= $num_active} {incr i} {
-        set tcp($i) [new Agent/TCP/Newreno]
-        #$tcp($i) attach [open ./tcp1.tr w]
-        #$tcp($i) set bugFix_ false
-        #$tcp($i) trace cwnd_
-        #$tcp($i) trace ack_
-        #$tcp($i) trace ssthresh_
-        #$tcp($i) trace nrexmit_
-        #$tcp($i) trace nrexmitpack_
-        #$tcp($i) trace nrexmitbytes_
-        #$tcp($i) trace ncwndcuts_
-        #$tcp($i) trace ncwndcuts1_
-        #$tcp($i) trace dupacks_
-        # $tcp($i) trace curseq_
-        # $tcp($i) trace maxseq_
-        $tcp($i) set fid_ [expr 1000 + $i]
-        $ns attach-agent $node_(0,$i) $tcp($i)
+        
+        if {$pattern == "LOCAL"} {
+            set r 0
+        } elseif {$pattern == "RANDOM"} {
+            set r [expr int([expr floor([$ru1 value])])]
+        } else {
+            puts "Pattern was $pattern"
+            set r 0
+        }
+        set m [expr int([expr floor([$ru2 value])])]
+        if {($r == 0) && ($m ==0)} {
+            puts "not allowed server on (0,0)"
+            set m [expr int([expr floor([$ru2 value])])]
+        }
+        puts "Rack $r, machine $m"
+        $ns attach-agent $node_($r,$m) $tcp($n)
 
-        set tcp_server_sink($i) [new Agent/TCPSink]
-        $tcp_server_sink($i) set fid_ [expr 1100 + $i]
-        $ns attach-agent $node_(0,$i) $tcp_server_sink($i)
+        set tcp_server_sink($n) [new Agent/TCPSink]
+        $tcp_server_sink($n) set fid_ [expr 1100 + $n]
+        $ns attach-agent $node_($r,$m) $tcp_server_sink($n)
 
     }
 
-    for {set i 1} {$i <= $num_active} {incr i} {
+    for {set i 0} {$i < $num_active} {incr i} {
         # connect the sending agents to sinks
         $ns connect $tcpc($i) $tcp_server_sink($i)
         $ns connect $tcp($i) $tcpc_sink($i)
@@ -171,14 +189,15 @@ if {$pattern == "LOCAL"} {
         
     set clientApp [new Application/IncastTcpAppClient $tcpcdummy [expr $block_size * 100]]
     puts "NUM ACTIVE = $num_active"
-    for {set i 1} {$i <= $num_active} {incr i} {
+    for {set i 0} {$i < $num_active} {incr i} {
         set srvApp($i) [new Application/IncastTcpAppServer $tcp($i) [expr $block_size * 100]]
 
         $clientApp connect $srvApp($i) $tcpc($i) $tcpc_sink($i)
 
         $tcp_server_sink($i) setparent $srvApp($i)
     }
-}
+
+
 
 $ns at 0.1 "$clientApp start"
 $ns at 1.0 "record"
@@ -199,7 +218,7 @@ proc record { } {
 
     # Record how many bytes have been received by the traffic sinks.
     
-    for {set i 1} {$i <= $num_active} {incr i} {
+    for {set i 0} {$i < $num_active} {incr i} {
         set bw($i) [$tcpc_sink($i) set bytes_]
         set bw_interval($i) [expr $bw_interval($i) + $bw($i)]
         set bw_total($i) [expr $bw_total($i) + $bw($i)]
@@ -210,7 +229,7 @@ proc record { } {
     set temp 0
     if {$it >= 1.0} {
         puts -nonewline $fmove "$now\t"
-        for {set i 1} {$i <= $num_active} {incr i} {
+        for {set i 0} {$i < $num_active} {incr i} {
             puts -nonewline $fmove "[expr $bw_interval($i)/$it*8/1000000] \t"
             set temp [expr $temp + $bw_interval($i) ]
         }
@@ -223,7 +242,7 @@ proc record { } {
     # Calculate the bandwidth (in MBit/s) and write it to the files
     set temp2 0
     puts -nonewline $finstant "$now\t"  
-    for {set i 1} {$i <= $num_active} {incr i} {
+    for {set i 0} {$i < $num_active} {incr i} {
         puts -nonewline $finstant "[expr $bw($i)/$time*8/1000000]\t"
         set temp2 [expr $temp2 + $bw($i)]
 
